@@ -1,0 +1,393 @@
+#!/usr/bin/env node
+const { Server } = require('socket.io'); // Importamos el servidor de sockets (Socket.io)
+
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('./app');
+var debug = require('debug')('proyectonode:server');
+var http = require('http');
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '3190'); // Puerto en el que se va a ejecutar el servidor
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app); // 1. Crear el servidor http
+const io = new Server(server); //   2. Crear el servidor de sockets
+const { writeFile, unlink, existsSync } = require("fs");
+const ruta = require('path');
+
+// Creamos el array de usuarios conectados por grupos:
+var grupoUsuarios1 = [];
+var grupoUsuarios2 = [];
+var grupoUsuarios3 = [];
+var grupoUsuarios4 = [];
+var grupoUsuarios5 = [];
+
+// Creamos los contadores de usuarios conectados por grupos:
+var usuariosConectadosGrupo1 = 0;
+var usuariosConectadosGrupo2 = 0;
+var usuariosConectadosGrupo3 = 0;
+var usuariosConectadosGrupo4 = 0;
+var usuariosConectadosGrupo5 = 0;
+
+
+io.on('connection', (socket) => {
+
+  // Creamos la rutas principales para las carpetas de archivos
+  socket.subidaFotoUsuarios = __dirname + '/public/fotoUsuarios';
+  socket.subidaArchivosUsuarios = __dirname + '/public/archivosCompartidos'
+  socket.idUsuarioMensajePrivado = '';
+
+  // Asignamos al usuario una ID (socket.id)
+  socket.on('asignarIdUsuario', id => {
+    socket.idUsuario = id;
+  });
+
+  // Mostramos en la consola del servidor que un usuario se ha conectado
+  console.log(`Usuario con el ID: ${socket.id} conectado`);
+
+  socket.usuariosConectados = 0;
+
+
+  // Añadir usuario a la lista de usuarios
+
+  socket.on('añadirUsuarioAlGrupo', datos => {
+    socket.nombreUsuario = datos.nombreUsuario;
+    socket.grupo = datos.grupo;
+    socket.estado = datos.estado;
+    socket.fotoUsuario = datos.fotoUsuario;
+
+    
+    // Guardar foto de usuario en el servidor
+
+    writeFile(`${socket.subidaFotoUsuarios}/${socket.idUsuario}.jpg`, socket.fotoUsuario, (err) => {
+      if (err) {
+        console.log(err);
+      }
+      socket.emit('fotoUsuarioSubida');
+    });
+
+    socket.join(datos.grupo);
+
+    var datosUsuario = {
+      idUsuario: socket.idUsuario,
+      nombreUsuario: datos.nombreUsuario,
+      estado: datos.estado,
+    };
+
+    switch (datos.grupo) {
+      case '1':
+        usuariosConectadosGrupo1++;
+        grupoUsuarios1.push(datosUsuario);
+        io.to(socket.grupo).emit('nuevoUsuarioConectado', grupoUsuarios1);
+        io.to(socket.grupo).emit('usuariosConectados', usuariosConectadosGrupo1);
+        break;
+      case '2':
+        usuariosConectadosGrupo2++;
+        grupoUsuarios2.push(datosUsuario);
+        io.to(socket.grupo).emit('nuevoUsuarioConectado', grupoUsuarios2);
+        io.to(socket.grupo).emit('usuariosConectados', usuariosConectadosGrupo2);
+        break;
+      case '3':
+        usuariosConectadosGrupo3++;
+        grupoUsuarios3.push(datosUsuario);
+        io.to(socket.grupo).emit('nuevoUsuarioConectado', grupoUsuarios3);
+        io.to(socket.grupo).emit('usuariosConectados', usuariosConectadosGrupo3);
+        break;
+      case '4':
+        usuariosConectadosGrupo4++;
+        grupoUsuarios4.push(datosUsuario);
+        io.to(socket.grupo).emit('nuevoUsuarioConectado', grupoUsuarios4);
+        io.to(socket.grupo).emit('usuariosConectados', usuariosConectadosGrupo4);
+        break;
+      case '5':
+        usuariosConectadosGrupo5++;
+        grupoUsuarios5.push(datosUsuario);
+        io.to(socket.grupo).emit('nuevoUsuarioConectado', grupoUsuarios5);
+        io.to(socket.grupo).emit('usuariosConectados', usuariosConectadosGrupo5);
+        break;
+    }
+  });
+
+
+
+
+  // Enviar mensaje
+  socket.on("nuevoMensaje", mensaje => {
+    let datosMensaje = {
+      mensaje: mensaje,
+      nombreUsuario: socket.nombreUsuario,
+      idUsuario: socket.idUsuario,
+      fecha: new Date()
+    }
+    io.to(socket.grupo).emit('nuevoMensaje', datosMensaje); // Emitimos el mensaje a todos los usuarios del grupo.
+  })
+
+  socket.on("nuevoMensajePrivado", mensaje => {
+    let datosMensajePrivado = {
+      mensaje: mensaje,
+      nombreUsuario: socket.nombreUsuario,
+      idUsuario: socket.idUsuario,
+      fecha: new Date()
+    }
+
+    io.to(socket.idUsuarioMensajePrivado).emit('nuevoMensajePrivado', datosMensajePrivado); // Emitimos el mensaje al usuario privado.
+  });
+
+  // Escribiendo en general
+  socket.on('escribiendo', datos => {
+    io.to(socket.grupo).emit('escribiendo',
+      {
+        idUsuario: datos.idUsuario,
+        escribiendo: datos.escribiendo
+      });
+  });
+
+  // Escribiendo en chat privado
+  socket.on('escribiendoChatPrivado', datos => {
+    io.to(socket.idUsuarioMensajePrivado).emit('escribiendoChatPrivado',
+      {
+        idUsuario: datos.idUsuario,
+        escribiendo: datos.escribiendo
+      });
+  });
+
+  // Enviar foto de usuario
+  socket.on('obtenerFotoUsuario', datos => {
+    socket.emit('fotoDelUsuario', {
+      ruta: `fotoUsuarios/${datos.idUsuario}.jpg`,
+      idUsuario: datos.idUsuario,
+      nombreUsuario: datos.nombreUsuario
+    });
+  });
+
+  // Enviar foto de usuario
+  socket.on('fotoUsuarioIndividual', datos => {
+    socket.emit('fotoUsuarioIndividual', {
+      ruta: `/fotoUsuarios/${datos.idUsuario}.jpg`,
+      nombreUsuario: datos.nombreUsuario,
+      estado: datos.estado,
+    });
+  });
+
+
+  // Subir fichero al servidor
+  socket.on('subirArchivo', archivo => {
+    let sinEspacios = archivo.nombre.replace(/\s/g, '_')
+    writeFile(`${socket.subidaArchivosUsuarios}/${sinEspacios}`, archivo.buffer, (err) => { // Archivo.buffer es el archivo en sí
+      if (err) {
+        console.log(err);
+      }
+      socket.emit('mensajeConArchivo',
+        {
+          ruta: `archivoCompartidos/${sinEspacios}`,
+          nombreUsuario: socket.username,
+          idUsuario: socket.userID,
+          fecha: new Date(),
+          tipo: archivo.tipo
+        });
+    });
+  });
+
+  socket.on('subirArchivoDeChatPrivado', archivo => {
+    let sinEspacios = archivo.nombre.replace(/\s/g, '_')
+    writeFile(`${socket.subidaArchivosUsuarios}/${sinEspacios}`, archivo.buffer, (err) => {
+      if (err) {
+        console.log(err);
+      }
+      socket.emit('mensajePrivadoConArchivo',
+        {
+          ruta: `archivosCompartidos/${sinEspacios}`,
+          nombreUsuario: socket.nombreUsuario,
+          idUsuario: socket.idUsuario,
+          fecha: new Date(),
+          tipo: archivo.tipo
+        });
+    });
+  });
+
+  // Enviar datos de fichero
+  socket.on('manejarMensajeConArchivo', datos => {
+    io.to(socket.grupo).emit('escribirMensajeConArchivo',
+      {
+        ruta: datos.ruta,
+        nombreUsuario: socket.nombreUsuario,
+        idUsuario: socket.idUsuario,
+        fecha: new Date(),
+        tipo: datos.tipo
+      });
+  });
+
+  // Enviar datos de fichero a usuario privado
+  socket.on('manejarMensajePrivadoConArchivo', datos => {
+    io.to(socket.idUsuarioMensajePrivado).emit('escribirMensajePrivadoConArchivo',
+      {
+        ruta: datos.ruta,
+        nombreUsuario: socket.nombreUsuario,
+        idUsuario: socket.idUsuario,
+        fecha: new Date(),
+        tipo: datos.tipo
+      });
+  });
+
+
+  socket.on('empezarChatPrivado', idUsuario => {
+    socket.idUsuarioMensajePrivado = idUsuario;
+
+    socket.join(idUsuario);
+    socket.emit('eliminarNotificacion', idUsuario);
+  });
+
+  socket.on('notificarUsuario', datos => {
+    socket.to(datos.to).emit('notificarUsuario', datos.from);
+    // Notifica al usuario que le han enviado un mensaje privado.
+  });
+
+  socket.on('abandonarChatPrivado', () => {
+    socket.leave(socket.idUsuarioMensajePrivado);
+  });
+
+  // Desconectar usuario
+  socket.on('disconnect', () => {
+    switch (socket.grupo) {
+      case '1':
+        usuariosConectadosGrupo1--;
+        io.to(socket.grupo).emit('usuarioDesconectado', { idUsuario: socket.idUsuario, usuariosConectados: usuariosConectadosGrupo1 });
+        grupoUsuarios1.forEach((usuario, indice) => {
+          if (usuario.idUsuario == socket.idUsuario) {
+            grupoUsuarios1.splice(indice, 1);
+          }
+        });
+        break;
+      case '2':
+        usuariosConectadosGrupo2--;
+        io.to(socket.grupo).emit('usuarioDesconectado', { idUsuario: socket.idUsuario, usuariosConectados: usuariosConectadosGrupo2 });
+        grupoUsuarios2.forEach((usuario, indice) => {
+          if (usuario.idUsuario == socket.idUsuario) {
+            grupoUsuarios2.splice(indice, 1);
+          }
+        });
+        break;
+      case '3':
+        usuariosConectadosGrupo3--;
+        io.to(socket.grupo).emit('usuarioDesconectado', { idUsuario: socket.idUsuario, usuariosConectados: usuariosConectadosGrupo3 });
+        grupoUsuarios3.forEach((usuario, indice) => {
+          if (usuario.idUsuario == socket.idUsuario) {
+            grupoUsuarios3.splice(indice, 1);
+          }
+        });
+        break;
+      case '4':
+        usuariosConectadosGrupo4--;
+        io.to(socket.grupo).emit('usuarioDesconectado', { idUsuario: socket.idUsuario, usuariosConectados: usuariosConectadosGrupo4 });
+        grupoUsuarios4.forEach((usuario, indice) => {
+          if (usuario.idUsuario == socket.idUsuario) {
+            grupoUsuarios4.splice(indice, 1);
+          }
+        });
+        break;
+      case '5':
+        usuariosConectadosGrupo5--;
+        io.to(socket.grupo).emit('usuarioDesconectado', { idUsuario: socket.idUsuario, usuariosConectados: usuariosConectadosGrupo5 });
+        grupoUsuarios5.forEach((usuario, indice) => {
+          if (usuario.idUsuario == socket.idUsuario) {
+            grupoUsuarios5.splice(indice, 1);
+          }
+        });
+        break;
+    }
+
+    console.log(`El usuario con el id: ${socket.idUsuario} se ha desconectado.`);
+
+    if (existsSync(`${socket.subidaFotoUsuarios}/${socket.idUsuario}.jpg`) == true) {
+      unlink(`${socket.subidaFotoUsuarios}/${socket.idUsuario}.jpg`, (err) => {
+        if (err) {
+          console.log(err);
+        }
+      }
+      );
+    }
+    // Esto lo que hace es eliminar la foto del usuario del servidor cuando se desconecta con el método unlink de fs.
+
+  });
+});
+
+// No tocamos nada de aquí en adelante
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
